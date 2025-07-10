@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Repartidor - Panel de Envíos</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #map { height: 400px; margin-top: 20px; }
+    input { margin-bottom: 10px; }
+    h2, h3 { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h2>🚚 Repartidor</h2>
+
+  <label>ID Repartidor:</label><br>
+  <input type="text" id="repartidorId" required placeholder="Ej. R123"><br>
+
+  <div id="map"></div>
+
+  <h3>📋 Mis envíos aceptados</h3>
+  <input type="text" id="repartidorIdResumen" placeholder="Tu ID de repartidor">
+  <button onclick="verResumen()">Ver resumen</button>
+  <ul id="listaResumen"></ul>
+
+  <script>
+    const map = L.map('map').setView([9.838, -83.905], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    if (Notification.permission !== 'granted') Notification.requestPermission();
+
+    // Ubicación en vivo
+    setInterval(() => {
+      const id = document.getElementById('repartidorId').value;
+      if (!id) return;
+      navigator.geolocation.getCurrentPosition(pos => {
+        fetch('/ubicacion-repartidor', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            repartidorId: id,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          })
+        });
+      });
+    }, 5000);
+
+    // Mostrar solicitudes activas en el mapa
+    async function mostrarSolicitudes() {
+      const res = await fetch('/solicitudes');
+      const solicitudes = await res.json();
+
+      map.eachLayer(l => {
+        if (l instanceof L.Marker) map.removeLayer(l);
+      });
+
+      solicitudes.forEach(s => {
+        const marker = L.marker([s.lat, s.lng]).addTo(map);
+        const popup = document.createElement('div');
+
+        popup.innerHTML = `
+          <strong>📦 ${s.articulo}</strong><br>
+          Cliente: ${s.clienteId}<br>
+          Destino: ${s.destino || 'No especificado'}<br>
+          Estado: ${s.estado}<br>
+        `;
+
+        if (s.estado === 'pendiente') {
+          popup.innerHTML += `
+            <button onclick="aceptar('${s.clienteId}')">✅ Aceptar</button>
+            <button onclick="ignorar('${s.clienteId}')">❌ Ignorar</button>
+          `;
+
+          if (!window.__notificados) window.__notificados = {};
+          if (!window.__notificados[s.clienteId]) {
+            window.__notificados[s.clienteId] = true;
+            new Notification('📦 Nuevo pedido disponible', {
+              body: `Cliente ${s.clienteId} solicitó: ${s.articulo}`,
+              icon: 'https://cdn-icons-png.flaticon.com/512/565/565547.png'
+            });
+          }
+        }
+
+        if (s.estado === 'en camino' && s.repartidorId === document.getElementById('repartidorId').value) {
+          popup.innerHTML += `<button onclick="marcarEntregado('${s.clienteId}')">📬 Marcar entregado</button>`;
+        }
+
+        marker.bindPopup(popup);
+      });
+    }
+
+    async function aceptar(clienteId) {
+      const id = document.getElementById('repartidorId').value;
+      if (!id) return alert('⚠️ Ingresa tu ID de repartidor');
+
+      await fetch('/aceptar-envio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId, repartidorId: id })
+      });
+
+      alert('✅ Pedido aceptado');
+      mostrarSolicitudes();
+    }
+
+    function ignorar(clienteId) {
+      alert(`❌ Pedido de cliente ${clienteId} ignorado`);
+    }
+
+    async function marcarEntregado(clienteId) {
+      await fetch(`/entregado?clienteId=${clienteId}`, { method: 'POST' });
+      alert('📬 Pedido marcado como entregado');
+      mostrarSolicitudes();
+    }
+
+    // Resumen de envíos aceptados
+    async function verResumen() {
+      const id = document.getElementById('repartidorIdResumen').value;
+      if (!id) return;
+
+      const res = await fetch(`/mis-envios?repartidorId=${id}`);
+      const envios = await res.json();
+      const lista = document.getElementById('listaResumen');
+      lista.innerHTML = '';
+
+      if (envios.length === 0) {
+        lista.innerHTML = '<li>🔎 No tienes envíos asignados</li>';
+        return;
+      }
+
+      envios.forEach(envio => {
+        const fecha = envio.fechaHora
+          ? new Date(envio.fechaHora).toLocaleString('es-ES', {
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit'
+            })
+          : 'Sin fecha';
+
+        const item = document.createElement('li');
+        item.textContent = `📦 Cliente ${envio.clienteId} | ${envio.articulo} → ${envio.destino} | ${envio.estado} | 📅 ${fecha}`;
+        lista.appendChild(item);
+      });
+    }
+
+    mostrarSolicitudes();
+    setInterval(mostrarSolicitudes, 7000);
+  </script>
+</body>
+</html>
+          

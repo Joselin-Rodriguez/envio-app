@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Administrador - Panel de Pedidos</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+    tr.pendiente { background-color: #fff4c2; }
+    tr.en-camino { background-color: #c2f0c2; }
+    tr.entregado { background-color: #d0d0d0; }
+  </style>
+</head>
+<body>
+  <h2>🛡️ Panel Administrador</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Artículo</th>
+        <th>Destino</th>
+        <th>Latitud</th>
+        <th>Longitud</th>
+        <th>Estado</th>
+        <th>Repartidor</th>
+        <th>Fecha y Hora</th>
+      </tr>
+    </thead>
+    <tbody id="tablaSolicitudes"></tbody>
+  </table>
+
+  <script>
+    async function cargarSolicitudes() {
+      const res = await fetch('/solicitudes');
+      const solicitudes = await res.json();
+      const tabla = document.getElementById('tablaSolicitudes');
+      tabla.innerHTML = '';
+
+      solicitudes.forEach(s => {
+        const fila = document.createElement('tr');
+        fila.className = s.estado === 'pendiente' ? 'pendiente' :
+                         s.estado === 'en camino' ? 'en-camino' :
+                         s.estado === 'entregado' ? 'entregado' : '';
+
+        const fecha = s.fechaHora
+          ? new Date(s.fechaHora).toLocaleString('es-ES', {
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit'
+            })
+          : '-';
+
+        fila.innerHTML = `
+          <td>${s.clienteId}</td>
+          <td>${s.articulo}</td>
+          <td>${s.destino || '-'}</td>
+          <td>${s.lat?.toFixed(5) || '-'}</td>
+          <td>${s.lng?.toFixed(5) || '-'}</td>
+          <td>${s.estado}</td>
+          <td>${s.repartidorId || '-'}</td>
+          <td>${fecha}</td>
+        `;
+        tabla.appendChild(fila);
+      });
+    }
+
+    cargarSolicitudes();
+    setInterval(cargarSolicitudes, 5000);
+  </script>
+</body>
+</html>

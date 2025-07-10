@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cliente - Solicitar envío</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>#map { height: 400px; margin-top: 20px; }</style>
+</head>
+<body>
+  <h2>📦 Solicita tu envío</h2>
+  <form id="formSolicitud">
+    <label>ID Cliente:</label><br><input type="text" id="clienteId" required><br>
+    <label>Artículo:</label><br><input type="text" id="articulo" required><br>
+    <label>Destino:</label><br><input type="text" id="destino" required><br><br>
+    <button type="submit">Solicitar envío</button>
+  </form>
+  <div id="map"></div>
+
+  <script>
+    const map = L.map('map').setView([9.838, -83.905], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    document.getElementById('formSolicitud').addEventListener('submit', async e => {
+      e.preventDefault();
+      const clienteId = document.getElementById('clienteId').value;
+      const articulo = document.getElementById('articulo').value;
+      const destino = document.getElementById('destino').value;
+
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        await fetch('/solicitud-envio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clienteId, lat, lng, articulo, destino })
+        });
+        L.marker([lat, lng]).addTo(map).bindPopup(`📦 ${articulo}`).openPopup();
+        alert('✅ Solicitud enviada');
+        e.target.reset();
+      });
+    });
+
+    async function mostrarRepartidores() {
+      const res = await fetch('/ubicaciones-repartidor');
+      const data = await res.json();
+      Object.values(data).forEach(coords => {
+        L.marker([coords.lat, coords.lng], {
+          icon: L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', iconSize: [30,30], iconAnchor:[15,30] })
+        }).addTo(map).bindPopup(`🚚 Repartidor`);
+      });
+    }
+
+    setInterval(mostrarRepartidores, 5000);
+  </script>
+</body>
+</html>
